@@ -39,17 +39,17 @@ val AllSymbols: Set<SymbolKey> = TerminalSymbols.union(NonTerminalSymbols)
 fun canonicalCollectionOfLR0(productionRule: ProductionRule = ProductionRules[0]): List<List<Item>> {
     /* 拡大規則 S -> E のItem集合 {S -> .E, } の closure の集合(集合の集合) */
     val items: List<Item> = listOf(Item(index = 0, productionRule = productionRule))
-    val c: MutableList<List<Item>> = mutableListOf(closure(items))
+    val canonicalCollection: MutableList<List<Item>> = mutableListOf(closure(items))
     val gotoCheck = mutableMapOf<List<Item>, Boolean>()
     while (true) {
         var continueLoop = false;
-        val copyOfC = c.toMutableList()
+        val copyOfC = canonicalCollection.toMutableList()
         for (closureItems in copyOfC) {
             for (symbol in AllSymbols) {
                 var gotoItems = goto(closureItems, symbol)
                 if (gotoItems.size != 0 && (gotoCheck[gotoItems] != true)) {
                     gotoCheck[gotoItems] = true;
-                    c.add(gotoItems)
+                    canonicalCollection.add(gotoItems)
                     continueLoop = true;
                 }
             }
@@ -58,7 +58,7 @@ fun canonicalCollectionOfLR0(productionRule: ProductionRule = ProductionRules[0]
             break;
         }
     }
-    return c;
+    return canonicalCollection;
 }
 
 /* Item集合のクロージャーを計算 */
