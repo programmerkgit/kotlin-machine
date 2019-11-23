@@ -1,5 +1,7 @@
 package parser
 
+import grammar.ProductionRule
+import grammar.ProductionRules
 import java.util.*
 
 /* TODO: 右端導出の方法を考える */
@@ -11,14 +13,25 @@ class Token(val terminalSymbol: SymbolKey) {
 class Action(val type: String, val number: Int) {
 }
 
+class Item(val index: Int, val left: SymbolKey, val right: Array<SymbolKey>) {
+}
+
 class Tree {
 }
+
+
+val Shift = "shift"
+val Reduce = "reduce"
+val Accept = "accept"
+
+val actionTable: Array<Map<SymbolKey, Action>> = arrayOf()
+val gotoTable: Array<Map<SymbolKey, Int>> = arrayOf()
+val inputTokens: MutableList<Token> = mutableListOf()
+
 /* 核 */
 /* Items */
 /* Closure */
 
-class Item(val index: Int, val left: SymbolKey, val right: Array<Symbol>) {
-}
 
 /* 単一のItemから全てのClosure集合を取得する関数 */
 fun closureOfItem(item: Item): List<Item> {
@@ -78,22 +91,8 @@ typealias SymbolKey = String
 class Symbol(val key: SymbolKey, val isTerminal: Boolean = false, val isStart: Boolean = false) {
 }
 
-class ProductionRule(val left: SymbolKey, val right: Array<Symbol>) {
-}
-
-val productionRules: Array<ProductionRule> = arrayOf()
-
-val Shift = "shift"
-val Reduce = "reduce"
-val Accept = "accept"
-
-val actionTable: Array<Map<SymbolKey, Action>> = arrayOf()
-val gotoTable: Array<Map<SymbolKey, Int>> = arrayOf()
-val inputTokens: MutableList<Token> = mutableListOf()
-
 
 fun nextItemGroups(item: Item) {
-
 }
 /* Item集合0からItem集合1を生成する */
 /* Item集合0のitemの.の次のSymbolに着目する */
@@ -122,8 +121,8 @@ fun parse(inputTokens: MutableList<Token>): Tree {
                 }
                 Reduce -> {
                     /* write m to output stream */
-                    appliedRules.push(productionRules[action.number])
-                    val rule = productionRules[action.number]
+                    appliedRules.push(ProductionRules[action.number])
+                    val rule = ProductionRules[action.number]
                     val size = rule.right.size
                     for (i in 1..size) {
                         stateStack.pop()

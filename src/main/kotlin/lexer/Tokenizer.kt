@@ -24,7 +24,7 @@ class Tokenizer(val tokenPatterns: List<TokenPattern>) {
     private val allInOnePattern =
         this.tokenPatterns.map { it.pattern }
             .joinToString("|", prefix = "(?:", postfix = ")")
-            .toRegex()
+            .toRegex();
 
 
     /*　先頭文字からマッチする分のTokenを切り出し、Tokenと残りのテキストを返す。　*/
