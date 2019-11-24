@@ -3,7 +3,7 @@ import org.spekframework.spek2.Spek
 import org.spekframework.spek2.style.specification.describe
 
 
-object ParserTest : Spek({
+object ParserActionGotoTest : Spek({
     describe("first") {
         it("do") {
             val parser: SLRParser = SLRParser(
