@@ -30,7 +30,7 @@ val NON_TERMINAL_SYMBOLS2: Set<Symbol> = setOf(
 object LR0ParserActionAndGoto : Spek({
     describe("first") {
         it("do") {
-            val parser: LR0Parser = LR0Parser(
+            val parser: SLR1Parser = SLR1Parser(
                 nonTerminalSymbolKeys = NON_TERMINAL_SYMBOLS2,
                 terminalSymbolKeys = TERMINAL_SYMBOLS2,
                 productionRules = ProductionRules2,

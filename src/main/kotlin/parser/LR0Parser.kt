@@ -1,93 +1,28 @@
-import grammar.Item
-import grammar.ProductionRule
-import grammar.Symbol
+import grammar.*
 
 /* action table state symbol action  */
 /* go to table state  symbol gotoState */
 
+const val SHIFT = "shift"
+const val REDUCE = "reduce"
+const val ACCEPT = "accept"
 
+data class Action(val type: String, val state: Int) {
+    override fun toString(): String {
+        return "Action. type: ${type} state: ${state}"
+    }
+}
 
 
 data class LR0Parser(
     val nonTerminalSymbolKeys: Set<Symbol>,
     val terminalSymbolKeys: Set<Symbol>,
-    val productionRules: Array<ProductionRule>,
-    val startSymbol: Symbol,
-    val endSymbol: Symbol
+    val productionRules: Array<ProductionRule>
 ) {
-    val allSymbolKeys = nonTerminalSymbolKeys + terminalSymbolKeys;
+    val allSymbolKeys = terminalSymbolKeys + nonTerminalSymbolKeys;
     val automantonTable: MutableList<MutableMap<Symbol, Int>> = mutableListOf()
     var actionTable: MutableList<MutableMap<Symbol, Action>> = mutableListOf()
     var gotoTable: MutableList<MutableMap<Symbol, Int>> = mutableListOf()
-
-
-    val followMap: MutableMap<Symbol, MutableSet<Symbol>> = mutableMapOf()
-    val followCheck: MutableMap<Symbol, Boolean> = mutableMapOf()
-
-    /* Follow集合 */
-    fun follow(symbol: Symbol): MutableSet<Symbol> {
-        if (followMap[startSymbol] == null) {
-            followMap[startSymbol] = mutableSetOf(endSymbol)
-        }
-        fun execute(symbol: Symbol): MutableSet<Symbol> {
-            if (followCheck[symbol] == true) {
-                return followMap[symbol]!!
-            }
-            if (followMap[symbol] == null) {
-                followMap[symbol] = mutableSetOf()
-            }
-            for (productionRule in productionRules) {
-                if (productionRule.right.contains(symbol)) {
-                    val symbolIndex: Int = productionRule.right.indexOf(symbol)
-                    if (symbolIndex < productionRule.right.size) {
-                        val nextSymbol = if (productionRule.right.size - 1 == symbolIndex) {
-                            ""
-                        } else {
-                            productionRule.right[symbolIndex + 1]
-                        }
-                        val firstOfNext = first(nextSymbol)
-                        if (firstOfNext.contains("")) {
-                            followMap[symbol] = followMap[symbol]!!.union(execute(productionRule.left)).toMutableSet()
-                        } else {
-                            followMap[symbol] = followMap[symbol]!!.union(firstOfNext).toMutableSet()
-                        }
-                    }
-                }
-            }
-            followCheck[symbol] = true;
-            return followMap[symbol]!!
-        }
-        return execute(symbol)
-    }
-
-    /* First集合 */
-    fun first(symbol: Symbol): List<Symbol> {
-        val firstCheck: MutableMap<Symbol, Boolean> = mutableMapOf();
-        fun execute(symbol: Symbol): List<Symbol> {
-            return if (terminalSymbolKeys.contains(symbol)) {
-                firstCheck[symbol] = true;
-                return listOf(symbol)
-            } else if (symbol == "") {
-                firstCheck[symbol] = true;
-                return listOf("")
-            } else if (nonTerminalSymbolKeys.contains(symbol)) {
-                productionRules.filter {
-                    it.left == symbol
-                }.map {
-                    val first = it.right[0]
-                    if (firstCheck[first] != true) {
-                        firstCheck[first] = true;
-                        execute(it.right[0])
-                    } else {
-                        listOf<Symbol>()
-                    }
-                }.flatten()
-            } else {
-                return listOf<Symbol>("error?")
-            }
-        }
-        return execute(symbol)
-    }
 
 
     lateinit var canonicalCollection: List<List<Item>>
@@ -125,7 +60,6 @@ data class LR0Parser(
     }
 
     init {
-        /* Action Tableと Goto Tableを初期化 */
         fun initActionGotoTable() {
             /* acceptすべきItemの定義 */
             val acceptItem = Item(index = productionRules[0].right.size, productionRule = productionRules[0])
@@ -134,7 +68,7 @@ data class LR0Parser(
                 actionTable.add(mutableMapOf())
                 /* 入力の終わりを示す '$' の列をアクション表に追加し、アイテム S → E • を含むアイテム集合に対応するマスに acc を書き込む。 */
                 if (canonicalCollection[i].contains(acceptItem)) {
-                    actionTable[i][endSymbol] = Action(type = ACCEPT, state = 0)
+                    actionTable[i][END_SYMBOL] = Action(type = ACCEPT, state = 0)
                 }
                 for ((symbol, goToState) in symbolGotoStatePair) {
                     /* 1.非終端記号に関する列はGOTO表に転記される。*/
@@ -149,8 +83,8 @@ data class LR0Parser(
             }
             /*
              アイテム集合 i が A → w • という形式のアイテムを含み、
-             A が S'出ない場合
-             Follow(A) の全ての要素について action(i,a) = a
+             対応する文法規則 A → w の番号 m が m > 0 なら、
+             状態 i に対応するアクション表の行には全て reduce アクション rm を書き込む。
             */
             for ((i, items) in canonicalCollection.withIndex()) {
                 for (item in items) {
@@ -159,15 +93,11 @@ data class LR0Parser(
                         /* 対応する文法規則 A → w の番号 m */
                         val rule = ProductionRule(left = item.left, right = item.right)
                         val m: Int = productionRules.indexOf(rule)
-                        /*
-                            A が S'出ない場合
-                            Follow(A) の全ての要素aについて action(i,a) = reduce m
-                         */
-                        val followA = follow(rule.left)
-                        if (0 < m && (rule.left != startSymbol)) {
-                            for (symbol in followA) {
+                        /* m > 0 なら、状態 i に対応するアクション表の行には全て reduce アクション rm を書き込む */
+                        if (0 < m) {
+                            for (key in (terminalSymbolKeys + setOf(END_SYMBOL))) {
                                 /* TODO: 既に書き込まれてたら shift-reduce or reduce-reduce 競合のエラー */
-                                actionTable[i][symbol] = Action(type = REDUCE, state = m)
+                                actionTable[i][key] = Action(type = REDUCE, state = m)
                             }
                         }
                     }
@@ -207,7 +137,7 @@ data class LR0Parser(
         return closureOfItems
     }
 
-    /* GOTO(Ii, A) => Item集合 */
+    /* GOTO */
     fun goto(items: List<Item>, symbol: Symbol): List<Item> {
         /* .Symbol である Item集合の.を一個進め、そのClosure集合を取得 */
         val targetItems = items.filter { item ->
