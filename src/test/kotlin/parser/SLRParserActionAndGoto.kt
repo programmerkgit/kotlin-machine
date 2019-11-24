@@ -17,7 +17,7 @@ object ParserActionGotoTest : Spek({
             for ((i, pair) in parser.actionTable.withIndex()) {
                 if (i == 0) {
                     print("state|".padStart(7))
-                    for (key in TERMINAL_SYMBOLS + setOf(ENDCHAR)) {
+                    for (key in TERMINAL_SYMBOLS + setOf(END_SYMBOL)) {
                         print("${key}|".padStart(8, '-'))
                     }
                     print("|")
@@ -27,7 +27,7 @@ object ParserActionGotoTest : Spek({
                     println()
                 }
                 print("${i}|".padStart(7))
-                for (key in TERMINAL_SYMBOLS + setOf(ENDCHAR)) {
+                for (key in TERMINAL_SYMBOLS + setOf(END_SYMBOL)) {
                     val action = pair[key]
                     if (action != null) {
                         print("${action.type.substring(0..0)} ${action.state}|".padStart(8, '-'))

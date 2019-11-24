@@ -3,18 +3,10 @@ import grammar.*
 /* action table state symbol action  */
 /* go to table state  symbol gotoState */
 
-const val SHIFT = "shift"
-const val REDUCE = "reduce"
-const val ACCEPT = "accept"
-
-data class Action(val type: String, val state: Int) {
-    override fun toString(): String {
-        return "Action. type: ${type} state: ${state}"
-    }
-}
 
 
-data class SLRParser(
+
+data class LR0Parser(
     val nonTerminalSymbolKeys: Set<Symbol>,
     val terminalSymbolKeys: Set<Symbol>,
     val productionRules: Array<ProductionRule>
