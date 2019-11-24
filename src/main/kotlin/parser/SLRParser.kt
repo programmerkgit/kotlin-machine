@@ -92,7 +92,7 @@ data class SLRParser(
                     if (item.index == item.right.size) {
                         /* 対応する文法規則 A → w の番号 m */
                         val rule = ProductionRule(left = item.left, right = item.right)
-                        val m: Int = ProductionRules.indexOf(rule)
+                        val m: Int = productionRules.indexOf(rule)
                         /* m > 0 なら、状態 i に対応するアクション表の行には全て reduce アクション rm を書き込む */
                         if (0 < m) {
                             for (key in (terminalSymbolKeys + setOf(END_SYMBOL))) {
