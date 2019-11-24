@@ -15,11 +15,10 @@ data class Item(val index: Int, val productionRule: ProductionRule) {
 }
 
 
-
-
 /* Define Grammar */
 const val START_SYMBOL = "S"
 const val END_SYMBOL = "$"
+const val VOID_SYMBOL = "ε"
 
 val ProductionRules: Array<ProductionRule> = arrayOf(
     ProductionRule(START_SYMBOL, arrayOf("E")),
@@ -31,11 +30,11 @@ val ProductionRules: Array<ProductionRule> = arrayOf(
 )
 
 
- val TERMINAL_SYMBOLS: Set<Symbol> = setOf(
+val TERMINAL_SYMBOLS: Set<Symbol> = setOf(
     "*", "+", "0", "1"
 )
 
- val NON_TERMINAL_SYMBOLS: Set<Symbol> = setOf(
+val NON_TERMINAL_SYMBOLS: Set<Symbol> = setOf(
     "E", "B", START_SYMBOL
 )
 

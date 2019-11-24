@@ -5,9 +5,18 @@ import grammar.Symbol
 /* action table state symbol action  */
 /* go to table state  symbol gotoState */
 
+data class ItemWithTerminal(val index: Int, val productionRule: ProductionRule, val terminalSymbol: Symbol) {
+    val right: Array<Symbol> = productionRule.right;
+    val left: Symbol = productionRule.left;
+    override fun toString(): String {
+        val right = this.right.toMutableList();
+        right.add(this.index, ".")
+        return "${this.left} -> ${right.joinToString("")}"
+    }
+}
 
 
-data class SLR1Parser(
+data class LR1Parser(
     val nonTerminalSymbolKeys: Set<Symbol>,
     val terminalSymbolKeys: Set<Symbol>,
     val productionRules: Array<ProductionRule>,
@@ -59,33 +68,115 @@ data class SLR1Parser(
         return execute(symbol)
     }
 
-    /* First集合 */
-    fun first(symbol: Symbol): List<Symbol> {
-        val firstCheck: MutableMap<Symbol, Boolean> = mutableMapOf();
-        fun execute(symbol: Symbol): List<Symbol> {
-            return if (terminalSymbolKeys.contains(symbol)) {
-                firstCheck[symbol] = true;
-                return listOf(symbol)
-            } else if (symbol == "") {
-                firstCheck[symbol] = true;
-                return listOf("")
-            } else if (nonTerminalSymbolKeys.contains(symbol)) {
-                productionRules.filter {
-                    it.left == symbol
-                }.map {
-                    val first = it.right[0]
-                    if (firstCheck[first] != true) {
-                        firstCheck[first] = true;
-                        execute(it.right[0])
-                    } else {
-                        listOf<Symbol>()
+    /* First集合のinitialize */
+    val firstMap: MutableMap<Symbol, MutableSet<Symbol>> = mutableMapOf()
+
+    init {
+        var loop = true
+        var count = 0;
+        firstMap[""] = mutableSetOf<Symbol>("")
+        while (loop) {
+            count++;
+            loop = false
+            for (symbol in allSymbolKeys) {
+                if (firstMap[symbol] == null) {
+                    firstMap[symbol] = mutableSetOf()
+                    loop = true;
+                }
+                if (terminalSymbolKeys.contains(symbol)) {
+                    if (!firstMap[symbol]!!.contains(symbol)) {
+                        firstMap[symbol]?.add(symbol)
+                        loop = true;
                     }
-                }.flatten()
-            } else {
-                return listOf<Symbol>("error?")
+                }
+            }
+            for (rule in productionRules) {
+                val symbol: Symbol = rule.left;
+                val right: Array<Symbol> = rule.right
+                if (firstMap[symbol] == null) {
+                    firstMap[symbol] = mutableSetOf()
+                    loop = true;
+                }
+                if (rule.right.size == 1 && rule.right[0] == "") {
+                    if (!firstMap[symbol]!!.contains("")) {
+                        firstMap[symbol]?.add(symbol)
+                        loop = true;
+                    }
+                }
+                if (terminalSymbolKeys.contains(right[0])) {
+                    if (!firstMap[symbol]!!.contains(right[0])) {
+                        firstMap[symbol]?.add(right[0])
+                        loop = true;
+                    }
+                }
+                for ((i, rightSymbol) in right.withIndex()) {
+                    if (firstMap[rightSymbol] == null) {
+                        firstMap[rightSymbol] = mutableSetOf()
+                        loop = true;
+                    }
+                    /* 右規則を追加。 */
+                    val rightFirst: MutableSet<Symbol> = firstMap[rightSymbol]!!;
+                    val initialSize = firstMap[symbol]!!.size
+                    firstMap[symbol] = (firstMap[symbol]!! + rightFirst).toMutableSet()
+                    if (initialSize < firstMap[symbol]!!.size) {
+                        loop = true;
+                    }
+                    /* から集合がある場合は、right[1], right[2] ... をチェック */
+                    if (rightFirst.contains("")) {
+                        /*　全てにから集合があった場合、から集合を追加　*/
+                        if (i == right.size - 1) {
+                            firstMap[symbol]!!.add("")
+                            if (initialSize < firstMap[symbol]!!.size) {
+                                loop = true;
+                            }
+                        }
+                        continue;
+                    } else {
+                        /* から集合がない場合はrightを追加して終わり */
+                        break;
+                    }
+                }
             }
         }
-        return execute(symbol)
+    }
+
+    fun first(symbol: Symbol): MutableSet<Symbol> {
+        if (firstMap[symbol] != null) {
+            return firstMap[symbol]!!
+        }
+        /* Symbol is Terminal Symbol */
+        if (terminalSymbolKeys.contains(symbol)) {
+            firstMap[symbol] = mutableSetOf(symbol)
+            return firstMap[symbol]!!
+        } else {
+            val result = mutableSetOf<Symbol>()
+            firstMap[symbol] = result
+            val nullProductionRule = ProductionRule(left = symbol, right = arrayOf(""))
+            if (productionRules.filter { it == nullProductionRule }.isNotEmpty()) {
+                result.add("")
+            }
+            if (nonTerminalSymbolKeys.contains(symbol)) {
+                productionRules.filter { it.left == symbol }.forEach {
+                    loop@ for ((i, rightSymbol) in it.right.withIndex()) {
+                        val firstOfRight = first(rightSymbol)
+                        firstOfRight.filter {
+                            terminalSymbolKeys.contains(it)
+                        }.forEach {
+                            result.add(it)
+                        }
+                        if (firstOfRight.contains("")) {
+                            if (i == it.right.size - 1) {
+                                result.add("")
+                            }
+                            continue@loop;
+                        } else {
+                            break@loop;
+                        }
+                    }
+                }
+            }
+            return result
+        }
     }
 
 
@@ -94,12 +185,12 @@ data class SLR1Parser(
     init {
         /* 正準 LR(0) 集成: Canonical Collection of LR(0) items */
         fun canonicalCollectionFn(productionRule: ProductionRule = productionRules[0]): List<List<Item>> {
-            /* 拡大規則 S -> E のItemWithTerminal集合 {S -> .E, } の closure の集合(集合の集合) */
+            /* 拡大規則 S -> E のItem集合 {S -> .E, } の closure の集合(集合の集合) */
             val items: List<Item> = listOf(Item(index = 0, productionRule = productionRule))
             val canonicalCollection: MutableList<List<Item>> = mutableListOf(closure(items))
             val gotoCheck = mutableMapOf<List<Item>, Boolean>()
             var i: Int = 0;
-            /*　ItemWithTerminal集合 * Symbolの組み合わせでループ　*/
+            /*　Item集合 * Symbolの組み合わせでループ　*/
             while (i < canonicalCollection.size) {
                 automantonTable.add(mutableMapOf())
                 val closureItems = canonicalCollection[i]
@@ -127,8 +218,7 @@ data class SLR1Parser(
         /* Action Tableと Goto Tableを初期化 */
         fun initActionGotoTable() {
             /* acceptすべきItemの定義 */
-            val acceptItem =
-                Item(index = productionRules[0].right.size, productionRule = productionRules[0])
+            val acceptItem = Item(index = productionRules[0].right.size, productionRule = productionRules[0])
             for ((i, symbolGotoStatePair) in automantonTable.withIndex()) {
                 gotoTable.add(mutableMapOf())
                 actionTable.add(mutableMapOf())
@@ -222,5 +312,42 @@ data class SLR1Parser(
         return closure(targetItems)
     }
 
+    fun printTable() {
+        print("LR1: ActionTable||".padStart((terminalSymbolKeys.size + 2) * 8))
+        print("GOTO")
+        println()
+        for ((i, pair) in actionTable.withIndex()) {
+            if (i == 0) {
+                print("state|".padStart(7))
+                for (key in terminalSymbolKeys + setOf(endSymbol)) {
+                    print("${key}|".padStart(8, '-'))
+                }
+                print("|")
+                for (key in nonTerminalSymbolKeys) {
+                    print("${key}|".padStart(8, '-'))
+                }
+                println()
+            }
+            print("${i}|".padStart(7))
+            for (key in terminalSymbolKeys + setOf(endSymbol)) {
+                val action = pair[key]
+                if (action != null) {
+                    print("${action.type.substring(0..0)} ${action.state}|".padStart(8, '-'))
+                } else {
+                    print("|".padStart(8, '-'))
+                }
+            }
+            print("|")
+            for (key in nonTerminalSymbolKeys) {
+                val v = gotoTable[i][key]
+                if (v != null) {
+                    print("${v}|".padStart(8, '-'))
+                } else {
+                    print("|".padStart(8, '-'))
+                }
+            }
+            println()
+        }
+    }
 
 }
