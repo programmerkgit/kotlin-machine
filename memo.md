@@ -9,3 +9,5 @@
 Copy to Libじゃ無い方を選択する。
 
 # Syntax Tree(parse)
+
+# Equals of Kotlin

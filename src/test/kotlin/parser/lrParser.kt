@@ -1,23 +1,18 @@
 import grammar.*
 import org.spekframework.spek2.Spek
 import org.spekframework.spek2.style.specification.describe
-import kotlin.test.assertEquals
 
 
 object ParserTest : Spek({
     describe("first") {
         it("do") {
-            val result = closure(
-                listOf(
-                    Item(0, ProductionRules[0])
-                )
+            val parser: SLRParser = SLRParser(
+                nonTerminalSymbolKeys = NON_TERMINAL_SYMBOLS,
+                terminalSymbolKeys = TERMINAL_SYMBOLS,
+                productionRules = ProductionRules
             )
-            for (a in result) {
-                print(a)
-            }
-            val I = result
-            val GoTo = goto(I, "E")
-            val c = canonicalCollectionOfLR0();
+            val I = parser.closure(listOf(Item(0, ProductionRules[0])))
+            val GoTo = parser.goto(I, "E")
             print(GoTo)
         }
     }
