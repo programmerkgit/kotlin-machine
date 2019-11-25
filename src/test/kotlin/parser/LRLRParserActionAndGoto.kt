@@ -19,7 +19,7 @@ private val productionRules = arrayOf(
 )
 
 
-object LR1ParserActionAndGoto : Spek({
+object LALRParserActionAndGoto : Spek({
     describe("first") {
         it("do") {
             val parser: LR1Parser = LR1Parser(

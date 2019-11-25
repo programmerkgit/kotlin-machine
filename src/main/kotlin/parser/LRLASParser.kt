@@ -6,7 +6,7 @@ import grammar.Symbol
 private const val EMPTY = ""
 
 
-data class LR1Item(
+data class LRLRItem(
     val index: Int,
     val productionRule: ProductionRule,
     val terminalSymbol: Symbol
@@ -28,7 +28,7 @@ data class LR1Item(
 }
 
 
-data class LR1Parser(
+data class LRLASParser(
     val nonTerminalSymbolKeys: Set<Symbol>,
     val terminalSymbolKeys: Set<Symbol>,
     val productionRules: Array<ProductionRule>,
