@@ -149,7 +149,7 @@ data class SLR1Parser(
             }
             /*
              アイテム集合 i が A → w • という形式のアイテムを含み、
-             A が S'出ない場合
+             A が S'でない場合
              Follow(A) の全ての要素について action(i,a) = a
             */
             for ((i, items) in canonicalCollection.withIndex()) {

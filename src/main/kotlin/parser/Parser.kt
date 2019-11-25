@@ -1,40 +1,17 @@
+import grammar.Item
 import grammar.ProductionRule
 import grammar.Symbol
 
 /* action table state symbol action  */
 /* go to table state  symbol gotoState */
-const val EMPTY = ""
 
-
-data class LR1Item(
-    val index: Int,
-    val productionRule: ProductionRule,
-    val terminalSymbol: Symbol
-) {
-    val right: Array<Symbol> = productionRule.right;
-    val left: Symbol = productionRule.left;
-
-    init {
-        if (terminalSymbol == EMPTY) {
-            error("should not empty")
-        }
-    }
-
-    override fun toString(): String {
-        val right = this.right.toMutableList();
-        right.add(this.index, ".")
-        return "${this.left} -> ${right.joinToString(EMPTY)}, ${terminalSymbol}"
-    }
-}
-
-
-data class LR1Parser(
+abstract class Parser(
     val nonTerminalSymbolKeys: Set<Symbol>,
     val terminalSymbolKeys: Set<Symbol>,
     val productionRules: Array<ProductionRule>,
-    val startSymbol: Symbol = "E'",
-    val endSymbol: Symbol = "$",
-    val emptySymbol: Symbol = ""
+    val startSymbol: Symbol,
+    val endSymbol: Symbol,
+    val emptySymbol: Symbol
 ) {
     val allSymbolKeys = nonTerminalSymbolKeys + terminalSymbolKeys;
     val automantonTable: MutableList<MutableMap<Symbol, Int>> = mutableListOf()
@@ -42,19 +19,15 @@ data class LR1Parser(
     var gotoTable: MutableList<MutableMap<Symbol, Int>> = mutableListOf()
 
     fun follow(symbol: Symbol): MutableSet<Symbol> {
-        if (followMap[symbol] == null) {
-            return mutableSetOf()
-        } else {
-            return followMap[symbol]!!
-        }
+        return followMap[symbol]!!
     }
 
     /* First集合のinitialize */
     val firstMap: MutableMap<Symbol, MutableSet<Symbol>> = mutableMapOf()
 
-    private fun initFirstMap() {
+    init {
+        /*　全てのSymbolに対して初期化　*/
         firstMap[emptySymbol] = mutableSetOf<Symbol>(emptySymbol)
-        firstMap[endSymbol] = mutableSetOf<Symbol>(endSymbol)
         for (symbol in allSymbolKeys) {
             firstMap[symbol] = mutableSetOf()
         }
@@ -90,8 +63,8 @@ data class LR1Parser(
                             break;
                         }
                     }
-                    /*全てのファーストが空集合を含む場合はεを追加*/
-                    if (rightSymbols.all { first(it).contains(emptySymbol) }) {
+                    /*全てがからの場合はεを追加*/
+                    if (rightSymbols.all { it.contains(emptySymbol) }) {
                         firstSet.add(emptySymbol)
                     }
                 }
@@ -103,24 +76,17 @@ data class LR1Parser(
         }
     }
 
-    init {
-        /*　全てのSymbolに対して初期化　*/
-        initFirstMap()
-    }
-
     val followMap: MutableMap<Symbol, MutableSet<Symbol>> = mutableMapOf()
 
     /* Follow集合のinitialize */
-    private fun initFollowMap() {
+    init {
         followMap[startSymbol] = mutableSetOf(endSymbol)
         for (symbol in allSymbolKeys) {
             followMap[symbol] = mutableSetOf()
         }
 
         var loop = true
-        var count = 0;
         while (loop) {
-            count++;
             loop = false
             for (symbol in allSymbolKeys) {
                 var followSet = followMap[symbol]!!
@@ -143,91 +109,78 @@ data class LR1Parser(
                 if (initialSize < followSet.size) {
                     loop = true
                 }
-                followMap[symbol] = followSet
+                firstMap[symbol] = followSet
             }
         }
     }
 
-    init {
-        initFollowMap()
-    }
-
 
     fun first(symbol: Symbol): MutableSet<Symbol> {
-        val result = firstMap[symbol]
-        if (result == null) {
-            return mutableSetOf()
-        } else {
-            return result
-        }
+        return firstMap[symbol]!!
     }
 
     fun firstOfSymbols(symbols: List<Symbol>): Set<Symbol> {
         var result: MutableSet<Symbol> = mutableSetOf()
         /* 右側のε以外を追加。εが含まれれてたらループ継続 */
         for (symbol in symbols) {
-            var firstSet: MutableSet<Symbol> = first(symbol)
+            var firstSet: MutableSet<Symbol> = firstMap[symbol]!!
             result = (result + (firstSet - setOf(emptySymbol))).toMutableSet()
             if (!firstSet.contains(emptySymbol)) {
                 break
             }
         }
         /*　全部εならε追加　*/
-        if (symbols.all { first(it).contains(emptySymbol) }) {
+        if (symbols.all { firstMap[it]!!.contains(emptySymbol) }) {
             result.add(emptySymbol)
         }
         return result;
     }
 
 
-    val canonicalCollection: List<List<LR1Item>>
+    lateinit var canonicalCollection: List<List<Item>>
 
     init {
-        /* 正準 LR(0) 集成: Canonical Collection of LR(0) items */
-        fun canonicalCollectionFn(productionRule: ProductionRule = productionRules[0]): List<List<LR1Item>> {
-            /* 拡大規則 S -> E のItem集合 {S -> .E, } の closure の集合(集合の集合) */
-            val items: List<LR1Item> =
-                listOf(LR1Item(index = 0, productionRule = productionRule, terminalSymbol = endSymbol))
-            val canonicalCollection: MutableList<List<LR1Item>> = mutableListOf(closure(items))
-            val gotoCheck = mutableMapOf<List<LR1Item>, Boolean>()
-            var i: Int = 0;
-            /*　Item集合 * Symbolの組み合わせでループ　*/
-            while (i < canonicalCollection.size) {
-                automantonTable.add(mutableMapOf())
-                val closureItems = canonicalCollection[i]
-                for (symbol in allSymbolKeys) {
-                    val gotoItems: List<LR1Item> = goto(closureItems, symbol)
-                    /* gotoが空の場合遷移なし。状態追加なし。 */
-                    if (gotoItems.isNotEmpty()) {
-                        /* 未追加の状態を追加 */
-                        if ((gotoCheck[gotoItems] != true)) {
-                            gotoCheck[gotoItems] = true;
-                            canonicalCollection.add(gotoItems)
-                        }
-                        /* automatonTableの作成. state * symbolkeys => state */
-                        automantonTable[i][symbol] = canonicalCollection.indexOf(gotoItems)
-                    }
-                }
-                i += 1;
-            }
-            return canonicalCollection;
-        }
         canonicalCollection = canonicalCollectionFn()
     }
+
+    /* 正準 LR(0) 集成: Canonical Collection of LR(0) items */
+    fun canonicalCollectionFn(productionRule: ProductionRule = productionRules[0]): List<List<Item>> {
+        /* 拡大規則 S -> E のItem集合 {S -> .E, } の closure の集合(集合の集合) */
+        val items: List<Item> = listOf(Item(index = 0, productionRule = productionRule))
+        val canonicalCollection: MutableList<List<Item>> = mutableListOf(closure(items))
+        val gotoCheck = mutableMapOf<List<Item>, Boolean>()
+        var i: Int = 0;
+        /*　Item集合 * Symbolの組み合わせでループ　*/
+        while (i < canonicalCollection.size) {
+            automantonTable.add(mutableMapOf())
+            val closureItems = canonicalCollection[i]
+            for (symbol in allSymbolKeys) {
+                val gotoItems = goto(closureItems, symbol)
+                /* gotoが空の場合遷移なし。状態追加なし。 */
+                if (gotoItems.isNotEmpty()) {
+                    /* 未追加の状態を追加 */
+                    if ((gotoCheck[gotoItems] != true)) {
+                        gotoCheck[gotoItems] = true;
+                        canonicalCollection.add(gotoItems)
+                    }
+                    /* automatonTableの作成 */
+                    automantonTable[i][symbol] = canonicalCollection.indexOf(gotoItems)
+                }
+            }
+            i += 1;
+        }
+        return canonicalCollection;
+    }
+
 
     init {
         initActionGotoTable()
     }
 
     /* Action Tableと Goto Tableを初期化 */
-    private fun initActionGotoTable() {
+    fun initActionGotoTable() {
         /* acceptすべきItemの定義 */
-        val acceptItem = LR1Item(
-            index = productionRules[0].right.size,
-            productionRule = productionRules[0],
-            terminalSymbol = endSymbol
-        )
-        /*  automaton Tableは状態と終端記号からgoto次の状態を記録してある */
+        val acceptItem = Item(index = productionRules[0].right.size, productionRule = productionRules[0])
         for ((i, symbolGotoStatePair) in automantonTable.withIndex()) {
             gotoTable.add(mutableMapOf())
             actionTable.add(mutableMapOf())
@@ -247,11 +200,10 @@ data class LR1Parser(
             }
         }
         /*
-            Reduce処理
-            アイテム集合 i が A → w • という形式のアイテムを含み、
-            A が S'でない場合時,
-            Itemi(A -> α・, a) なら action(i, a) = reduce m
-           */
+         アイテム集合 i が A → w • という形式のアイテムを含み、
+         A が S'出ない場合
+         Follow(A) の全ての要素について action(i,a) = a
+        */
         for ((i, items) in canonicalCollection.withIndex()) {
             for (item in items) {
                 /* アイテム集合 i が A → w • という形式を含む */
@@ -263,8 +215,12 @@ data class LR1Parser(
                         A が S'出ない場合
                         Follow(A) の全ての要素aについて action(i,a) = reduce m
                      */
-                    if (rule.left != startSymbol) {
-                        actionTable[i][item.terminalSymbol] = Action(type = REDUCE, state = m)
+                    val followA = follow(rule.left)
+                    if (0 < m && (rule.left != startSymbol)) {
+                        for (symbol in followA) {
+                            /* TODO: 既に書き込まれてたら shift-reduce or reduce-reduce 競合のエラー */
+                            actionTable[i][symbol] = Action(type = REDUCE, state = m)
+                        }
                     }
                 }
             }
@@ -273,9 +229,9 @@ data class LR1Parser(
 
 
     /* Item集合のクロージャーを計算 */
-    fun closure(items: List<LR1Item>): MutableList<LR1Item> {
+    fun closure(items: List<Item>): MutableList<Item> {
         /* results closure */
-        val closureOfItems: MutableList<LR1Item> = items.toMutableList()
+        val closureOfItems: MutableList<Item> = items.toMutableList()
         /* memory of inserted target symbol */
         val symbolCheck = mutableMapOf<Symbol, Boolean>()
         /* continue or no */
@@ -284,28 +240,17 @@ data class LR1Parser(
             val item = closureOfItems[i]
             i += 1;
             val index = item.index;
-            /* A -> aB. => end */
             if (index == item.right.size) {
                 continue;
             }
-            /* {A -> a.Bβ, a} */
-            val nextSymbol: Symbol = item.right[index]
-            val a = item.terminalSymbol
-            val betaA: MutableList<Symbol> = if (item.index == item.right.size - 1) {
-                mutableListOf()
-            } else {
-                item.right.slice((index + 1)..(item.right.size - 1)).toMutableList()
-            }
-            betaA.add(a)
+            val nextSymbol: Symbol = item.productionRule.right[index]
             /* add alternative rules */
-            this.productionRules.filter { it ->
-                it.left == nextSymbol
-            }.forEach { it ->
-                for (b in firstOfSymbols(betaA)) {
-                    val newItem = LR1Item(index = 0, productionRule = it, terminalSymbol = b)
-                    if (!closureOfItems.contains(newItem)) {
-                        closureOfItems.add(newItem)
-                    }
+            if (symbolCheck[nextSymbol] != true) {
+                symbolCheck[nextSymbol] = true;
+                this.productionRules.filter { it ->
+                    it.left == nextSymbol
+                }.forEach { it ->
+                    closureOfItems.add(Item(index = 0, productionRule = it))
                 }
             }
         }
@@ -313,8 +258,8 @@ data class LR1Parser(
     }
 
     /* GOTO(Ii, A) => Item集合 */
-    fun goto(items: List<LR1Item>, symbol: Symbol): List<LR1Item> {
-        /* .の次がSymbolであるItem集合の.を一個進め、そのClosure集合を取得 */
+    fun goto(items: List<Item>, symbol: Symbol): List<Item> {
+        /* .Symbol である Item集合の.を一個進め、そのClosure集合を取得 */
         val targetItems = items.filter { item ->
             if (item.index < item.right.size) {
                 item.right[item.index] == symbol
@@ -322,7 +267,7 @@ data class LR1Parser(
                 false
             }
         }.map { item ->
-            LR1Item(index = item.index + 1, productionRule = item.productionRule, terminalSymbol = item.terminalSymbol)
+            Item(index = item.index + 1, productionRule = item.productionRule)
         }
         return closure(targetItems)
     }
