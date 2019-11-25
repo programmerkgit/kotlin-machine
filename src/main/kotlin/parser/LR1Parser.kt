@@ -4,6 +4,7 @@ import grammar.Symbol
 
 /* action table state symbol action  */
 /* go to table state  symbol gotoState */
+const val EMPTY = ""
 
 data class ItemWithTerminal(val index: Int, val productionRule: ProductionRule, val terminalSymbol: Symbol) {
     val right: Array<Symbol> = productionRule.right;
@@ -11,7 +12,7 @@ data class ItemWithTerminal(val index: Int, val productionRule: ProductionRule, 
     override fun toString(): String {
         val right = this.right.toMutableList();
         right.add(this.index, ".")
-        return "${this.left} -> ${right.joinToString("")}"
+        return "${this.left} -> ${right.joinToString(EMPTY)}"
     }
 }
 
@@ -30,42 +31,10 @@ data class LR1Parser(
 
 
     val followMap: MutableMap<Symbol, MutableSet<Symbol>> = mutableMapOf()
-    val followCheck: MutableMap<Symbol, Boolean> = mutableMapOf()
 
-    /* Follow集合 */
+
     fun follow(symbol: Symbol): MutableSet<Symbol> {
-        if (followMap[startSymbol] == null) {
-            followMap[startSymbol] = mutableSetOf(endSymbol)
-        }
-        fun execute(symbol: Symbol): MutableSet<Symbol> {
-            if (followCheck[symbol] == true) {
-                return followMap[symbol]!!
-            }
-            if (followMap[symbol] == null) {
-                followMap[symbol] = mutableSetOf()
-            }
-            for (productionRule in productionRules) {
-                if (productionRule.right.contains(symbol)) {
-                    val symbolIndex: Int = productionRule.right.indexOf(symbol)
-                    if (symbolIndex < productionRule.right.size) {
-                        val nextSymbol = if (productionRule.right.size - 1 == symbolIndex) {
-                            ""
-                        } else {
-                            productionRule.right[symbolIndex + 1]
-                        }
-                        val firstOfNext = first(nextSymbol)
-                        if (firstOfNext.contains("")) {
-                            followMap[symbol] = followMap[symbol]!!.union(execute(productionRule.left)).toMutableSet()
-                        } else {
-                            followMap[symbol] = followMap[symbol]!!.union(firstOfNext).toMutableSet()
-                        }
-                    }
-                }
-            }
-            followCheck[symbol] = true;
-            return followMap[symbol]!!
-        }
-        return execute(symbol)
+        return followMap[symbol]!!
     }
 
     /* First集合のinitialize */
@@ -73,110 +42,111 @@ data class LR1Parser(
 
     init {
         var loop = true
-        var count = 0;
-        firstMap[""] = mutableSetOf<Symbol>("")
+        /*　全てのSymbolに対して初期化　*/
+        firstMap[EMPTY] = mutableSetOf<Symbol>(EMPTY)
+        for (symbol in allSymbolKeys) {
+            firstMap[symbol] = mutableSetOf()
+        }
         while (loop) {
-            count++;
             loop = false
             for (symbol in allSymbolKeys) {
-                if (firstMap[symbol] == null) {
-                    firstMap[symbol] = mutableSetOf()
-                    loop = true;
-                }
+                var firstSet: MutableSet<Symbol> = firstMap[symbol]!!
+                var initialSize = firstSet.size
                 if (terminalSymbolKeys.contains(symbol)) {
-                    if (!firstMap[symbol]!!.contains(symbol)) {
-                        firstMap[symbol]?.add(symbol)
-                        loop = true;
-                    }
+                    firstSet.add(symbol)
                 }
-            }
-            for (rule in productionRules) {
-                val symbol: Symbol = rule.left;
-                val right: Array<Symbol> = rule.right
-                if (firstMap[symbol] == null) {
-                    firstMap[symbol] = mutableSetOf()
-                    loop = true;
-                }
-                if (rule.right.size == 1 && rule.right[0] == "") {
-                    if (!firstMap[symbol]!!.contains("")) {
-                        firstMap[symbol]?.add(symbol)
-                        loop = true;
+
+                for (rule in productionRules) {
+                    val leftSymbol: Symbol = rule.left;
+                    val rightSymbols: Array<Symbol> = rule.right
+                    /* X -> ε */
+                    if (rightSymbols.size == 1 && rightSymbols[0] == EMPTY) {
+                        firstSet.add(leftSymbol)
                     }
-                }
-                if (terminalSymbolKeys.contains(right[0])) {
-                    if (!firstMap[symbol]!!.contains(right[0])) {
-                        firstMap[symbol]?.add(right[0])
-                        loop = true;
-                    }
-                }
-                for ((i, rightSymbol) in right.withIndex()) {
-                    if (firstMap[rightSymbol] == null) {
-                        firstMap[rightSymbol] = mutableSetOf()
-                        loop = true;
-                    }
-                    /* 右規則を追加。 */
-                    val rightFirst: MutableSet<Symbol> = firstMap[rightSymbol]!!;
-                    val initialSize = firstMap[symbol]!!.size
-                    firstMap[symbol] = (firstMap[symbol]!! + rightFirst).toMutableSet()
-                    if (initialSize < firstMap[symbol]!!.size) {
-                        loop = true;
-                    }
-                    /* から集合がある場合は、right[1], right[2] ... をチェック */
-                    if (rightFirst.contains("")) {
-                        /*　全てにから集合があった場合、から集合を追加　*/
-                        if (i == right.size - 1) {
-                            firstMap[symbol]!!.add("")
-                            if (initialSize < firstMap[symbol]!!.size) {
-                                loop = true;
-                            }
+                    /* 右規則 */
+                    for (symbolXi in rightSymbols) {
+                        /* First(A) += First(X1)。 */
+                        val firstSetOfXi: MutableSet<Symbol> = firstMap[symbolXi]!!;
+                        firstSet = (firstSet + (firstSetOfXi - setOf(EMPTY))).toMutableSet()
+                        /* から集合がある場合は、right[1], right[2] ... をチェック */
+                        if (firstSetOfXi.contains(EMPTY)) {
+                            /*　から集合が見つかった場合は次のX(i + 1)にcontinue　*/
+                            continue;
+                        } else {
+                            /* から集合が見つからない場合は一旦rightを追加して終わり */
+                            /*　Loopを繰り返す内にうちにいつか全てのから集合が補完される。　*/
+                            break;
                         }
-                        continue;
-                    } else {
-                        /* から集合がない場合はrightを追加して終わり */
-                        break;
+                    }
+                    /*全てがからの場合はεを追加*/
+                    if (rightSymbols.all { it.contains(EMPTY) }) {
+                        firstSet.add(EMPTY)
                     }
                 }
+                if (initialSize < firstSet.size) {
+                    loop = true
+                }
+                firstMap[symbol] = firstSet
             }
         }
     }
 
-    fun first(symbol: Symbol): MutableSet<Symbol> {
-        if (firstMap[symbol] != null) {
-            return firstMap[symbol]!!
+    /* Follow集合のinitialize */
+    init {
+        followMap[startSymbol] = mutableSetOf(endSymbol)
+        for (symbol in allSymbolKeys) {
+            followMap[symbol] = mutableSetOf()
         }
-        /* Symbol is Terminal Symbol */
-        if (terminalSymbolKeys.contains(symbol)) {
-            firstMap[symbol] = mutableSetOf(symbol)
-            return firstMap[symbol]!!
-        } else {
-            val result = mutableSetOf<Symbol>()
-            firstMap[symbol] = result
-            val nullProductionRule = ProductionRule(left = symbol, right = arrayOf(""))
-            if (productionRules.filter { it == nullProductionRule }.isNotEmpty()) {
-                result.add("")
-            }
-            if (nonTerminalSymbolKeys.contains(symbol)) {
-                productionRules.filter { it.left == symbol }.forEach {
-                    loop@ for ((i, rightSymbol) in it.right.withIndex()) {
-                        val firstOfRight = first(rightSymbol)
-                        firstOfRight.filter {
-                            terminalSymbolKeys.contains(it)
-                        }.forEach {
-                            result.add(it)
-                        }
-                        if (firstOfRight.contains("")) {
-                            if (i == it.right.size - 1) {
-                                result.add("")
+
+        var loop = true
+        while (loop) {
+            loop = false
+            for (symbol in allSymbolKeys) {
+                var followSet = followMap[symbol]!!
+                val initialSize = followSet.size
+
+                for (rule in productionRules) {
+                    val rightSymbols = rule.right
+                    val symbolIndex = rightSymbols.indexOf(symbol)
+                    if (0 <= symbolIndex) {
+                        if (symbolIndex < rightSymbols.size - 1) {
+                            val followSymbols = rightSymbols.slice((symbolIndex + 1)..(rightSymbols.size - 1))
+                            val firstOfFollowSymbols = firstOfSymbols(followSymbols)
+                            followSet = (followSet + (firstOfFollowSymbols - setOf(EMPTY))).toMutableSet()
+                            if (firstOfFollowSymbols.contains(EMPTY)) {
+                                followSet = (followSet + followMap[rule.left]!!).toMutableSet()
                             }
-                            continue@loop;
-                        } else {
-                            break@loop;
                         }
                     }
                 }
+                if (initialSize < followSet.size) {
+                    loop = true
+                }
+                firstMap[symbol] = followSet
             }
-            return result
         }
+    }
+
+
+    fun first(symbol: Symbol): MutableSet<Symbol>? {
+        return firstMap[symbol]
+    }
+
+    fun firstOfSymbols(symbols: List<Symbol>): Set<Symbol> {
+        var result: MutableSet<Symbol> = mutableSetOf()
+        /* 右側のε以外を追加。εが含まれれてたらループ継続 */
+        for (symbol in symbols) {
+            var firstSet: MutableSet<Symbol> = firstMap[symbol]!!
+            result = (result + (firstSet - setOf(EMPTY))).toMutableSet()
+            if (!firstSet.contains(EMPTY)) {
+                break
+            }
+        }
+        /*　全部εならε追加　*/
+        if (symbols.all { firstMap[it]!!.contains(EMPTY) }) {
+            result.add(EMPTY)
+        }
+        return result;
     }
 
 
