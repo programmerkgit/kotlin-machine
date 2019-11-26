@@ -28,7 +28,7 @@ data class LRLRItem(
 }
 
 
-data class LRLASParser(
+data class LALRSParser(
     val nonTerminalSymbolKeys: Set<Symbol>,
     val terminalSymbolKeys: Set<Symbol>,
     val productionRules: Array<ProductionRule>,
@@ -41,6 +41,23 @@ data class LRLASParser(
     var actionTable: MutableList<MutableMap<Symbol, Action>> = mutableListOf()
     var gotoTable: MutableList<MutableMap<Symbol, Int>> = mutableListOf()
 
+    val firstMap: MutableMap<Symbol, MutableSet<Symbol>> = mutableMapOf()
+    val followMap: MutableMap<Symbol, MutableSet<Symbol>> = mutableMapOf()
+    val canonicalCollection: MutableList<List<LR1Item>> = mutableListOf()
+
+    init {
+        /*　順番変更不可　*/
+        /* First集合の初期化 */
+        initFirstMap()
+        /* Follow集合の初期化 */
+        initFollowMap()
+        /* Cannonical Colleciconの初期化。同時に。Automatonの作成 */
+        initCanonicalCollection()
+        /* Action tableと GOTO Tableの初期化 */
+        initActionGotoTable()
+    }
+
+
     fun follow(symbol: Symbol): MutableSet<Symbol> {
         if (followMap[symbol] == null) {
             return mutableSetOf()
@@ -50,8 +67,6 @@ data class LRLASParser(
     }
 
     /* First集合のinitialize */
-    val firstMap: MutableMap<Symbol, MutableSet<Symbol>> = mutableMapOf()
-
     private fun initFirstMap() {
         firstMap[emptySymbol] = mutableSetOf<Symbol>(emptySymbol)
         firstMap[endSymbol] = mutableSetOf<Symbol>(endSymbol)
@@ -103,13 +118,6 @@ data class LRLASParser(
         }
     }
 
-    init {
-        /*　全てのSymbolに対して初期化　*/
-        initFirstMap()
-    }
-
-    val followMap: MutableMap<Symbol, MutableSet<Symbol>> = mutableMapOf()
-
     /* Follow集合のinitialize */
     private fun initFollowMap() {
         followMap[startSymbol] = mutableSetOf(endSymbol)
@@ -148,11 +156,6 @@ data class LRLASParser(
         }
     }
 
-    init {
-        initFollowMap()
-    }
-
-
     fun first(symbol: Symbol): MutableSet<Symbol> {
         val result = firstMap[symbol]
         if (result == null) {
@@ -179,44 +182,34 @@ data class LRLASParser(
         return result;
     }
 
-
-    val canonicalCollection: List<List<LR1Item>>
-
-    init {
+    private fun initCanonicalCollection() {
         /* 正準 LR(0) 集成: Canonical Collection of LR(0) items */
-        fun canonicalCollectionFn(productionRule: ProductionRule = productionRules[0]): List<List<LR1Item>> {
-            /* 拡大規則 S -> E のItem集合 {S -> .E, } の closure の集合(集合の集合) */
-            val items: List<LR1Item> =
-                listOf(LR1Item(index = 0, productionRule = productionRule, terminalSymbol = endSymbol))
-            val canonicalCollection: MutableList<List<LR1Item>> = mutableListOf(closure(items))
-            val gotoCheck = mutableMapOf<List<LR1Item>, Boolean>()
-            var i: Int = 0;
-            /*　Item集合 * Symbolの組み合わせでループ　*/
-            while (i < canonicalCollection.size) {
-                automantonTable.add(mutableMapOf())
-                val closureItems = canonicalCollection[i]
-                for (symbol in allSymbolKeys) {
-                    val gotoItems: List<LR1Item> = goto(closureItems, symbol)
-                    /* gotoが空の場合遷移なし。状態追加なし。 */
-                    if (gotoItems.isNotEmpty()) {
-                        /* 未追加の状態を追加 */
-                        if ((gotoCheck[gotoItems] != true)) {
-                            gotoCheck[gotoItems] = true;
-                            canonicalCollection.add(gotoItems)
-                        }
-                        /* automatonTableの作成. state * symbolkeys => state */
-                        automantonTable[i][symbol] = canonicalCollection.indexOf(gotoItems)
+        val productionRule: ProductionRule = productionRules[0]
+        /* 拡大規則 S -> E のItem集合 {S -> .E, } の closure の集合(集合の集合) */
+        val items: List<LR1Item> =
+            listOf(LR1Item(index = 0, productionRule = productionRule, terminalSymbol = endSymbol))
+        canonicalCollection.add(closure(items))
+        val gotoCheck = mutableMapOf<List<LR1Item>, Boolean>()
+        var i: Int = 0;
+        /*　Item集合 * Symbolの組み合わせでループ　*/
+        while (i < canonicalCollection.size) {
+            automantonTable.add(mutableMapOf())
+            val closureItems = canonicalCollection[i]
+            for (symbol in allSymbolKeys) {
+                val gotoItems: List<LR1Item> = goto(closureItems, symbol)
+                /* gotoが空の場合遷移なし。状態追加なし。 */
+                if (gotoItems.isNotEmpty()) {
+                    /* 未追加の状態を追加 */
+                    if ((gotoCheck[gotoItems] != true)) {
+                        gotoCheck[gotoItems] = true;
+                        canonicalCollection.add(gotoItems)
                     }
+                    /* automatonTableの作成. state * symbolkeys => state */
+                    automantonTable[i][symbol] = canonicalCollection.indexOf(gotoItems)
                 }
-                i += 1;
             }
-            return canonicalCollection;
+            i += 1;
         }
-        canonicalCollection = canonicalCollectionFn()
-    }
-
-    init {
-        initActionGotoTable()
     }
 
     /* Action Tableと Goto Tableを初期化 */
@@ -271,13 +264,10 @@ data class LRLASParser(
         }
     }
 
-
     /* Item集合のクロージャーを計算 */
     fun closure(items: List<LR1Item>): MutableList<LR1Item> {
         /* results closure */
         val closureOfItems: MutableList<LR1Item> = items.toMutableList()
-        /* memory of inserted target symbol */
-        val symbolCheck = mutableMapOf<Symbol, Boolean>()
         /* continue or no */
         var i = 0
         while (i < closureOfItems.size) {
@@ -328,7 +318,7 @@ data class LRLASParser(
     }
 
     fun printTable() {
-        print("LR1: ActionTable||".padStart((terminalSymbolKeys.size + 2) * 8))
+        print("LRLR: ActionTable||".padStart((terminalSymbolKeys.size + 2) * 8))
         print("GOTO")
         println()
         for ((i, pair) in actionTable.withIndex()) {

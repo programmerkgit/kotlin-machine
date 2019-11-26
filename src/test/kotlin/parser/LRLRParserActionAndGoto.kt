@@ -22,7 +22,7 @@ private val productionRules = arrayOf(
 object LALRParserActionAndGoto : Spek({
     describe("first") {
         it("do") {
-            val parser: LR1Parser = LR1Parser(
+            val parser: LALRSParser = LALRSParser(
                 nonTerminalSymbolKeys = nonTerminal,
                 terminalSymbolKeys = terminal,
                 productionRules = productionRules,
