@@ -6,7 +6,7 @@ import grammar.Symbol
 private const val EMPTY = ""
 
 
-data class LRLRItem(
+data class LALRItem(
     val index: Int,
     val productionRule: ProductionRule,
     val terminalSymbol: Symbol
@@ -20,11 +20,20 @@ data class LRLRItem(
         }
     }
 
+    fun compareWithLALR(item: LALRItem): Boolean {
+        return item.index == this.index && this.productionRule == item.productionRule
+    }
+
     override fun toString(): String {
         val right = this.right.toMutableList();
         right.add(this.index, ".")
         return "${this.left} -> ${right.joinToString(EMPTY)}, ${terminalSymbol}"
     }
+}
+
+data class Item(val index: Int, val productionRule: ProductionRule) {
+    val right: Array<Symbol> = productionRule.right;
+    val left: Symbol = productionRule.left;
 }
 
 
@@ -38,12 +47,16 @@ data class LALRSParser(
 ) {
     val allSymbolKeys = nonTerminalSymbolKeys + terminalSymbolKeys;
     val automantonTable: MutableList<MutableMap<Symbol, Int>> = mutableListOf()
+    val LALRAutomantonTable: MutableList<MutableMap<Symbol, Int>> = mutableListOf()
     var actionTable: MutableList<MutableMap<Symbol, Action>> = mutableListOf()
     var gotoTable: MutableList<MutableMap<Symbol, Int>> = mutableListOf()
 
     val firstMap: MutableMap<Symbol, MutableSet<Symbol>> = mutableMapOf()
     val followMap: MutableMap<Symbol, MutableSet<Symbol>> = mutableMapOf()
     val canonicalCollection: MutableList<List<LR1Item>> = mutableListOf()
+    val LALRCanonicalCollection: MutableList<List<LR1Item>> = mutableListOf()
+    val oldNewCanonicalMap: MutableMap<Int, Int> = mutableMapOf()
+    val LALRGotoMap: MutableMap<Int, Int> = mutableMapOf()
 
     init {
         /*　順番変更不可　*/
@@ -55,6 +68,8 @@ data class LALRSParser(
         initCanonicalCollection()
         /* Automatonの作成 */
         initAutomatonTable()
+        initLALRCanonicalCollection()
+        initLALRAutomatonTable()
         /* Action tableと GOTO Tableの初期化 */
         initActionGotoTable()
     }
@@ -265,6 +280,40 @@ data class LALRSParser(
         }
     }
 
+    private fun initLALRCanonicalCollection() {
+        val indexCheck = mutableMapOf<Int, Boolean>()
+        for ((i, iItems) in canonicalCollection.withIndex()) {
+            /* 既に追加済みなら次のループ */
+            if (indexCheck[i] == true) {
+                continue
+            }
+            /* 核を追加 */
+            LALRCanonicalCollection.add(iItems)
+            val count = LALRCanonicalCollection.size
+            val a = iItems.map { Item(index = it.index, productionRule = it.productionRule) }.toSet()
+            for ((j, jItems) in canonicalCollection.withIndex()) {
+                /* 既に追加済みなら次のループ */
+                if (indexCheck[j] == true) {
+                    continue
+                }
+                /* 同じ対象ならスキップ */
+                if (i == j) {
+                    continue
+                }
+                val b = jItems.map { Item(index = it.index, productionRule = it.productionRule) }.toSet()
+                val result: Boolean = a == b;
+                /* 核が同場合は和集合をとり再代入 */
+                if (result) {
+                    indexCheck[i] = true;
+                    indexCheck[j] = true;
+                    LALRCanonicalCollection[count - 1] =
+                        LALRCanonicalCollection[count - 1].union(jItems).toMutableList()
+                }
+            }
+        }
+    }
+
+
     private fun initAutomatonTable() {
         for ((i, items) in canonicalCollection.withIndex()) {
             /* canonical collectionの数の状態のテーブルを作成 */
@@ -277,6 +326,23 @@ data class LALRSParser(
                     continue;
                 }
                 automantonTable[i][symbol] = canonicalCollection.indexOf(gotoItems)
+            }
+        }
+    }
+
+    private fun initLALRAutomatonTable() {
+        for ((i, items) in LALRCanonicalCollection.withIndex()) {
+            /* canonical collectionの数の状態のテーブルを作成 */
+            LALRAutomantonTable.add(mutableMapOf())
+            /* 次に読み込むシンボルに対してgotoが存在する場合、そこへの状態を記録する */
+            for (symbol in allSymbolKeys) {
+                val gotoItems: List<LR1Item> = goto(items, symbol)
+                /* gotoが空の場合は遷移しない */
+                if (gotoItems.isEmpty()) {
+                    continue;
+                }
+                LALRAutomantonTable[i][symbol] = LALRCanonicalCollection.indexOf(gotoItems)
+                print(gotoItems)
             }
         }
     }
