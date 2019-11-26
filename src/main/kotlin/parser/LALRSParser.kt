@@ -53,10 +53,9 @@ data class LALRSParser(
 
     val firstMap: MutableMap<Symbol, MutableSet<Symbol>> = mutableMapOf()
     val followMap: MutableMap<Symbol, MutableSet<Symbol>> = mutableMapOf()
-    val canonicalCollection: MutableList<List<LR1Item>> = mutableListOf()
-    val LALRCanonicalCollection: MutableList<List<LR1Item>> = mutableListOf()
-    val oldNewCanonicalMap: MutableMap<Int, Int> = mutableMapOf()
-    val LALRGotoMap: MutableMap<Int, Int> = mutableMapOf()
+    val canonicalCollection: MutableList<Set<LR1Item>> = mutableListOf()
+    val LALRCanonicalCollection: MutableList<Set<LR1Item>> = mutableListOf()
+    val newLALROldLRMap: MutableMap<Int, Set<Int>> = mutableMapOf()
 
     init {
         /*　順番変更不可　*/
@@ -110,7 +109,7 @@ data class LALRSParser(
     }
 
     /* Item集合のクロージャーを計算 */
-    fun closure(items: List<LR1Item>): MutableList<LR1Item> {
+    fun closure(items: List<LR1Item>): Set<LR1Item> {
         /* results closure */
         val closureOfItems: MutableList<LR1Item> = items.toMutableList()
         /* continue or no */
@@ -144,11 +143,11 @@ data class LALRSParser(
                 }
             }
         }
-        return closureOfItems
+        return closureOfItems.toSet()
     }
 
     /* GOTO(Ii, A) => Item集合 */
-    fun goto(items: List<LR1Item>, symbol: Symbol): List<LR1Item> {
+    fun goto(items: Set<LR1Item>, symbol: Symbol): Set<LR1Item> {
         /* .の次がSymbolであるItem集合の.を一個進め、そのClosure集合を取得 */
         val targetItems = items.filter { item ->
             if (item.index < item.right.size) {
@@ -260,13 +259,13 @@ data class LALRSParser(
         val items: List<LR1Item> =
             listOf(LR1Item(index = 0, productionRule = productionRule, terminalSymbol = endSymbol))
         canonicalCollection.add(closure(items))
-        val gotoCheck = mutableMapOf<List<LR1Item>, Boolean>()
+        val gotoCheck = mutableMapOf<Set<LR1Item>, Boolean>()
         var i: Int = 0;
         /*　Item集合 * Symbolの組み合わせでループ　*/
         while (i < canonicalCollection.size) {
             val closureItems = canonicalCollection[i]
             for (symbol in allSymbolKeys) {
-                val gotoItems: List<LR1Item> = goto(closureItems, symbol)
+                val gotoItems: Set<LR1Item> = goto(closureItems, symbol)
                 /* gotoが空の場合遷移なし。状態追加なし。 */
                 if (gotoItems.isNotEmpty()) {
                     /* 未追加の状態を追加 */
@@ -290,6 +289,7 @@ data class LALRSParser(
             /* 核を追加 */
             LALRCanonicalCollection.add(iItems)
             val count = LALRCanonicalCollection.size
+            newLALROldLRMap[count - 1] = setOf(i)
             val a = iItems.map { Item(index = it.index, productionRule = it.productionRule) }.toSet()
             for ((j, jItems) in canonicalCollection.withIndex()) {
                 /* 既に追加済みなら次のループ */
@@ -307,7 +307,8 @@ data class LALRSParser(
                     indexCheck[i] = true;
                     indexCheck[j] = true;
                     LALRCanonicalCollection[count - 1] =
-                        LALRCanonicalCollection[count - 1].union(jItems).toMutableList()
+                        LALRCanonicalCollection[count - 1].union(jItems).toSet()
+                    newLALROldLRMap[count - 1] = newLALROldLRMap[count - 1]!!.union(setOf(j))
                 }
             }
         }
@@ -320,7 +321,7 @@ data class LALRSParser(
             automantonTable.add(mutableMapOf())
             /* 次に読み込むシンボルに対してgotoが存在する場合、そこへの状態を記録する */
             for (symbol in allSymbolKeys) {
-                val gotoItems: List<LR1Item> = goto(items, symbol)
+                val gotoItems: Set<LR1Item> = goto(items, symbol)
                 /* gotoが空の場合は遷移しない */
                 if (gotoItems.isEmpty()) {
                     continue;
@@ -331,18 +332,29 @@ data class LALRSParser(
     }
 
     private fun initLALRAutomatonTable() {
-        for ((i, items) in LALRCanonicalCollection.withIndex()) {
+        for ((i) in LALRCanonicalCollection.withIndex()) {
+            /* 元々のじょうたi2, i3, i5 */
+            val oldSateSet: Set<Int> = newLALROldLRMap[i]!!
             /* canonical collectionの数の状態のテーブルを作成 */
             LALRAutomantonTable.add(mutableMapOf())
             /* 次に読み込むシンボルに対してgotoが存在する場合、そこへの状態を記録する */
-            for (symbol in allSymbolKeys) {
-                val gotoItems: List<LR1Item> = goto(items, symbol)
-                /* gotoが空の場合は遷移しない */
-                if (gotoItems.isEmpty()) {
-                    continue;
+            for (symbol in (allSymbolKeys - setOf(startSymbol))) {
+                /* i2, i3, i5 => a の場合それぞれどこに移動するか 8, 9, 10 */
+                val oldGotos: Set<Int> = oldSateSet.filter {
+                    automantonTable[it][symbol] != null
+                }.map {
+                    automantonTable[it][symbol]!!
+                }.toSet()
+                /* goToが空の場合は遷移しない */
+                if (oldGotos.isEmpty()) {
+                    continue
                 }
-                LALRAutomantonTable[i][symbol] = LALRCanonicalCollection.indexOf(gotoItems)
-                print(gotoItems)
+                /* Goto(Ii, S) => I8, I9が含まれているI8,I9,I10を探す */
+                for (pair in newLALROldLRMap) {
+                    if ((oldGotos - pair.value).isEmpty()) {
+                        LALRAutomantonTable[i][symbol] = pair.key
+                    }
+                }
             }
         }
     }
@@ -356,11 +368,11 @@ data class LALRSParser(
             terminalSymbol = endSymbol
         )
         /*  automaton Tableは状態と終端記号からgoto次の状態を記録してある */
-        for ((i, symbolGotoStatePair) in automantonTable.withIndex()) {
+        for ((i, symbolGotoStatePair) in LALRAutomantonTable.withIndex()) {
             gotoTable.add(mutableMapOf())
             actionTable.add(mutableMapOf())
             /* 入力の終わりを示す '$' の列をアクション表に追加し、アイテム S → E • を含むアイテム集合に対応するマスに acc を書き込む。 */
-            if (canonicalCollection[i].contains(acceptItem)) {
+            if (LALRCanonicalCollection[i].contains(acceptItem)) {
                 actionTable[i][endSymbol] = Action(type = ACCEPT, state = 0)
             }
             for ((symbol, goToState) in symbolGotoStatePair) {
@@ -380,7 +392,7 @@ data class LALRSParser(
             A が S'でない場合時,
             Itemi(A -> α・, a) なら action(i, a) = reduce m
            */
-        for ((i, items) in canonicalCollection.withIndex()) {
+        for ((i, items) in LALRCanonicalCollection.withIndex()) {
             for (item in items) {
                 /* アイテム集合 i が A → w • という形式を含む */
                 if (item.index == item.right.size) {
