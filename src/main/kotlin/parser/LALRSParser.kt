@@ -51,8 +51,10 @@ data class LALRSParser(
         initFirstMap()
         /* Follow集合の初期化 */
         initFollowMap()
-        /* Cannonical Colleciconの初期化。同時に。Automatonの作成 */
+        /* Cannonical Colleciconの初期化 */
         initCanonicalCollection()
+        /* Automatonの作成 */
+        initAutomatonTable()
         /* Action tableと GOTO Tableの初期化 */
         initActionGotoTable()
     }
@@ -64,6 +66,85 @@ data class LALRSParser(
         } else {
             return followMap[symbol]!!
         }
+    }
+
+    fun first(symbol: Symbol): MutableSet<Symbol> {
+        val result = firstMap[symbol]
+        if (result == null) {
+            return mutableSetOf()
+        } else {
+            return result
+        }
+    }
+
+    fun firstOfSymbols(symbols: List<Symbol>): Set<Symbol> {
+        var result: MutableSet<Symbol> = mutableSetOf()
+        /* 右側のε以外を追加。εが含まれれてたらループ継続 */
+        for (symbol in symbols) {
+            var firstSet: MutableSet<Symbol> = first(symbol)
+            result = (result + (firstSet - setOf(emptySymbol))).toMutableSet()
+            if (!firstSet.contains(emptySymbol)) {
+                break
+            }
+        }
+        /*　全部εならε追加　*/
+        if (symbols.all { first(it).contains(emptySymbol) }) {
+            result.add(emptySymbol)
+        }
+        return result;
+    }
+
+    /* Item集合のクロージャーを計算 */
+    fun closure(items: List<LR1Item>): MutableList<LR1Item> {
+        /* results closure */
+        val closureOfItems: MutableList<LR1Item> = items.toMutableList()
+        /* continue or no */
+        var i = 0
+        while (i < closureOfItems.size) {
+            val item = closureOfItems[i]
+            i += 1;
+            val index = item.index;
+            /* A -> aB. => end */
+            if (index == item.right.size) {
+                continue;
+            }
+            /* {A -> a.Bβ, a} */
+            val nextSymbol: Symbol = item.right[index]
+            val a = item.terminalSymbol
+            val betaA: MutableList<Symbol> = if (item.index == item.right.size - 1) {
+                mutableListOf()
+            } else {
+                item.right.slice((index + 1)..(item.right.size - 1)).toMutableList()
+            }
+            betaA.add(a)
+            /* add alternative rules */
+            this.productionRules.filter { it ->
+                it.left == nextSymbol
+            }.forEach { it ->
+                for (b in firstOfSymbols(betaA)) {
+                    val newItem = LR1Item(index = 0, productionRule = it, terminalSymbol = b)
+                    if (!closureOfItems.contains(newItem)) {
+                        closureOfItems.add(newItem)
+                    }
+                }
+            }
+        }
+        return closureOfItems
+    }
+
+    /* GOTO(Ii, A) => Item集合 */
+    fun goto(items: List<LR1Item>, symbol: Symbol): List<LR1Item> {
+        /* .の次がSymbolであるItem集合の.を一個進め、そのClosure集合を取得 */
+        val targetItems = items.filter { item ->
+            if (item.index < item.right.size) {
+                item.right[item.index] == symbol
+            } else {
+                false
+            }
+        }.map { item ->
+            LR1Item(index = item.index + 1, productionRule = item.productionRule, terminalSymbol = item.terminalSymbol)
+        }
+        return closure(targetItems)
     }
 
     /* First集合のinitialize */
@@ -156,32 +237,7 @@ data class LALRSParser(
         }
     }
 
-    fun first(symbol: Symbol): MutableSet<Symbol> {
-        val result = firstMap[symbol]
-        if (result == null) {
-            return mutableSetOf()
-        } else {
-            return result
-        }
-    }
-
-    fun firstOfSymbols(symbols: List<Symbol>): Set<Symbol> {
-        var result: MutableSet<Symbol> = mutableSetOf()
-        /* 右側のε以外を追加。εが含まれれてたらループ継続 */
-        for (symbol in symbols) {
-            var firstSet: MutableSet<Symbol> = first(symbol)
-            result = (result + (firstSet - setOf(emptySymbol))).toMutableSet()
-            if (!firstSet.contains(emptySymbol)) {
-                break
-            }
-        }
-        /*　全部εならε追加　*/
-        if (symbols.all { first(it).contains(emptySymbol) }) {
-            result.add(emptySymbol)
-        }
-        return result;
-    }
-
+    /* Canonical Collectionの初期化 */
     private fun initCanonicalCollection() {
         /* 正準 LR(0) 集成: Canonical Collection of LR(0) items */
         val productionRule: ProductionRule = productionRules[0]
@@ -193,7 +249,6 @@ data class LALRSParser(
         var i: Int = 0;
         /*　Item集合 * Symbolの組み合わせでループ　*/
         while (i < canonicalCollection.size) {
-            automantonTable.add(mutableMapOf())
             val closureItems = canonicalCollection[i]
             for (symbol in allSymbolKeys) {
                 val gotoItems: List<LR1Item> = goto(closureItems, symbol)
@@ -204,11 +259,25 @@ data class LALRSParser(
                         gotoCheck[gotoItems] = true;
                         canonicalCollection.add(gotoItems)
                     }
-                    /* automatonTableの作成. state * symbolkeys => state */
-                    automantonTable[i][symbol] = canonicalCollection.indexOf(gotoItems)
                 }
             }
             i += 1;
+        }
+    }
+
+    private fun initAutomatonTable() {
+        for ((i, items) in canonicalCollection.withIndex()) {
+            /* canonical collectionの数の状態のテーブルを作成 */
+            automantonTable.add(mutableMapOf())
+            /* 次に読み込むシンボルに対してgotoが存在する場合、そこへの状態を記録する */
+            for (symbol in allSymbolKeys) {
+                val gotoItems: List<LR1Item> = goto(items, symbol)
+                /* gotoが空の場合は遷移しない */
+                if (gotoItems.isEmpty()) {
+                    continue;
+                }
+                automantonTable[i][symbol] = canonicalCollection.indexOf(gotoItems)
+            }
         }
     }
 
@@ -262,59 +331,6 @@ data class LALRSParser(
                 }
             }
         }
-    }
-
-    /* Item集合のクロージャーを計算 */
-    fun closure(items: List<LR1Item>): MutableList<LR1Item> {
-        /* results closure */
-        val closureOfItems: MutableList<LR1Item> = items.toMutableList()
-        /* continue or no */
-        var i = 0
-        while (i < closureOfItems.size) {
-            val item = closureOfItems[i]
-            i += 1;
-            val index = item.index;
-            /* A -> aB. => end */
-            if (index == item.right.size) {
-                continue;
-            }
-            /* {A -> a.Bβ, a} */
-            val nextSymbol: Symbol = item.right[index]
-            val a = item.terminalSymbol
-            val betaA: MutableList<Symbol> = if (item.index == item.right.size - 1) {
-                mutableListOf()
-            } else {
-                item.right.slice((index + 1)..(item.right.size - 1)).toMutableList()
-            }
-            betaA.add(a)
-            /* add alternative rules */
-            this.productionRules.filter { it ->
-                it.left == nextSymbol
-            }.forEach { it ->
-                for (b in firstOfSymbols(betaA)) {
-                    val newItem = LR1Item(index = 0, productionRule = it, terminalSymbol = b)
-                    if (!closureOfItems.contains(newItem)) {
-                        closureOfItems.add(newItem)
-                    }
-                }
-            }
-        }
-        return closureOfItems
-    }
-
-    /* GOTO(Ii, A) => Item集合 */
-    fun goto(items: List<LR1Item>, symbol: Symbol): List<LR1Item> {
-        /* .の次がSymbolであるItem集合の.を一個進め、そのClosure集合を取得 */
-        val targetItems = items.filter { item ->
-            if (item.index < item.right.size) {
-                item.right[item.index] == symbol
-            } else {
-                false
-            }
-        }.map { item ->
-            LR1Item(index = item.index + 1, productionRule = item.productionRule, terminalSymbol = item.terminalSymbol)
-        }
-        return closure(targetItems)
     }
 
     fun printTable() {
