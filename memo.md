@@ -31,3 +31,6 @@ function(::Foo)
 ```
 
    Callable references to constructors are typed as one of the KFunction<out R> subtypes , depending on the parameter count.
+   
+#Type variance, out, in
+[variance out in](https://kotlinlang.org/docs/reference/generics.html)
