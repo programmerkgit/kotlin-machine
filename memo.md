@@ -34,3 +34,7 @@ function(::Foo)
    
 #Type variance, out, in
 [variance out in](https://kotlinlang.org/docs/reference/generics.html)
+
+# gradle compile should not be used
+The compile configuration still exists but should not be used as it will not offer the guarantees that the api and implementation configurations provide
+

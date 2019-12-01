@@ -6,6 +6,7 @@ import kotlin.test.assertEquals
 object MyTest : Spek({
     describe("first") {
         it("do") {
+            println("1")
             assertEquals(true, true)
         }
     }
