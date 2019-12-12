@@ -38,3 +38,16 @@ function(::Foo)
 # gradle compile should not be used
 The compile configuration still exists but should not be used as it will not offer the guarantees that the api and implementation configurations provide
 
+# Internal set
+
+# Kotlin compiler
+https://github.com/JetBrains/kotlin
+
+# build script
+First of all, I assume you meant to include the “dependencies” block between “buildscript” and “classpath”.
+
+The “buildscript” block only controls dependencies for the buildscript process itself, not for the application code, which the top-level “dependencies” block controls.
+
+For instance, you could define dependencies in “buildscript/classpath” that represent Gradle plugins used in the build process. Those plugins would not be referenced as dependencies for the application code.
+
+Read the Gradle User Guide for more information (the PDF is easy to search).

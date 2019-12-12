@@ -131,7 +131,7 @@ fun foo() {
 }
 ```
 
-Target platform: JVMRunning on kotlin v. 1.3.50
+Target platform: JVMRunning on kotlin v. 1.3.61
 The return-expression returns from the nearest enclosing function, i.e. foo. (Note that such non-local returns are supported only for lambda expressions passed to inline functions.) If we need to return from a lambda expression, we have to label it and qualify the return:
 
 ```kotlin
@@ -296,7 +296,7 @@ fun foo() {
 }
 ```
 
-Target platform: JVMRunning on kotlin v. 1.3.50
+Target platform: JVMRunning on kotlin v. 1.3.61
 The return-expression returns from the nearest enclosing function, i.e. foo. (Note that such non-local returns are supported only for lambda expressions passed to inline functions.) If we need to return from a lambda expression, we have to label it and qualify the return:
 
 ```kotlin
