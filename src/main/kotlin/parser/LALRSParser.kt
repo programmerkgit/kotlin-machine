@@ -63,7 +63,7 @@ data class LALRSParser(
         initFirstMap()
         /* Follow集合の初期化 */
         initFollowMap()
-        /* Cannonical Colleciconの初期化 */
+        /* canonical collectionの初期化 */
         initCanonicalCollection()
         /* Automatonの作成 */
         initAutomatonTable()
@@ -313,7 +313,6 @@ data class LALRSParser(
             }
         }
     }
-
 
     private fun initAutomatonTable() {
         for ((i, items) in canonicalCollection.withIndex()) {
